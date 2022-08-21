@@ -1,0 +1,7 @@
+syntax = "proto3";
+
+message RPCMessage {
+    uint32 service = 1;
+    uint32 method = 2;
+    bytes payload = 3;
+}

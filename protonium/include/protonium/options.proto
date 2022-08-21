@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+import "google/protobuf/descriptor.proto";
+
+message ServiceOptions {
+  int32 number = 1;
+}
+
+extend google.protobuf.ServiceOptions {
+  ServiceOptions protonium_service = 1146;
+}
+
+message MethodOptions {
+  int32 number = 1;
+}
+
+extend google.protobuf.MethodOptions {
+  MethodOptions protonium_method = 1146;
+}
+
+message FileOptions {
+  bool ignore = 1;
+}
+
+extend google.protobuf.FileOptions {
+  FileOptions protonium_file = 1146;
+}
+
+option (protonium_file).ignore = true;

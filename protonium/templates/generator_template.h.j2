@@ -1,0 +1,109 @@
+#pragma once
+
+#include <protonium/protonium.h>
+#include <protonium/rpc_pb.h>
+{% for include in file.cpp_includes %}
+#include <{{ include }}>
+{% endfor %}
+
+{% macro render_enum(enum) %}
+enum {{ enum.name }} : int32_t {
+    {% for number, name in enum.entries %}
+    {{ name }} = {{ number }},
+    {% endfor %}
+};
+{% endmacro %}
+
+{% for enum in file.enums %}
+{{ render_enum(enum) }}
+{% endfor %}
+
+{% for message in file.messages recursive %}
+struct {{ message.name }} {
+    {% for enum in message.enums %}
+    {{ render_enum(enum) | indent(width = 4) }}
+    {% endfor %}
+
+    {{ loop(message.nested_messages) | indent(width = 4) }}
+
+    {% for oneof in message.oneofs %}
+    {{ oneof.cpp_type }} {{ oneof.name }};
+    {% endfor %}
+
+    {% for field in message.fields %}
+    {{ field.cpp_type }} {{ field.name }} {{ field.initializer }};
+    {% endfor %}
+
+    template <std::input_iterator Iterator, std::sentinel_for<Iterator> End>
+    bool decode(Iterator& _it, End _end) {
+        while(_it != _end) {
+            tag_t tag;
+            if(!tag.decode(_it, _end)) {
+                return false;
+            }
+
+            switch(tag) {
+                {% for field in message.fields %}
+                case {{ field.tag }}:
+                    if(!message_base::decode_field(_it, _end, tag, {{ field.name }})) {
+                        return false;
+                    }
+                    break;
+                {% endfor %}
+                default:
+                    if(!message_base::skip_field(_it, _end, tag)) {
+                        return false;
+                    }
+            }
+        }
+
+        return true;
+    }
+
+    template <std::output_iterator<uint8_t> Iterator, std::sentinel_for<Iterator> End>
+    bool encode(Iterator& _it, End _end) const {
+        return 
+            {% for field in message.fields %}
+            message_base::encode_field(_it, _end, {{ field.tag }}, {{ field.name }}) &&
+            {% endfor %}
+            true;
+    }
+
+    constexpr bool is_present() const {
+        return true;
+    }
+
+    constexpr std::size_t size_bytes() const {
+        return 
+            {% for field in message.fields %}
+            message_base::size_field({{ field.tag }}, {{ field.name }}) +
+            {% endfor %}
+            0;
+    }
+};
+
+{% endfor %}
+
+{% for service in file.services %}
+template <typename Handler>
+struct {{ service.name }} {
+    static constexpr uint32_t service_number = {{ service.number }};
+
+    Handler handler;
+
+    auto handle(RPCMessage& request, auto& response_transport) {
+        switch(request.method) {
+            {% for method in service.methods %}
+            case {{ method.number }}:
+                return response_transport.template send_response<{{ method.response_type }}>(request, handler.{{ method.name }}(decode_message<{{ method.request_type }}>(request.payload)));
+            {% endfor %}
+            default:
+                return response_transport.send_error();
+        }
+    }
+};
+
+template <typename Handler>
+{{ service.name }}(Handler&&) -> {{ service.name }}<Handler>;
+
+{% endfor %}
